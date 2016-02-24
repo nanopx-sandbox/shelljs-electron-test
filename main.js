@@ -28,19 +28,31 @@ app.on('ready', function() {
     event.sender.send('shell:close', `which ${command}`);
   });
 
-  ipcMain.on('shell:exec', function(event, ...args) {
-    const command = args.join(' ');
-    event.sender.send('shell:start', command);
-    const child = shell.exec(command, { async: true, silent: true });
-    child.stdout.on('data', function(data) {
-      event.sender.send('shell:exec:stdout', data);
+  ipcMain.on('shell:exec', function(event, ...commands) {
+    const promises = commands.map(function(command) {
+      return new Promise(function(resolve) {
+        var initialized = false;
+        const child = shell.exec(command, { async: true, silent: true });
+        child.stdout.on('data', function(data) {
+          if (!initialized) {
+            event.sender.send('shell:start', command);
+          }
+          initialized = true;
+          event.sender.send('shell:exec:stdout', data);
+        });
+        child.stderr.on('data', function(data) {
+          event.sender.send('shell:exec:stderr', data);
+        });
+        child.on('close', function () {
+          event.sender.send('shell:close', command);
+          resolve();
+        });
+      });
     });
-    child.stderr.on('data', function(data) {
-      event.sender.send('shell:exec:stderr', data);
+
+    Promise.all(promises).then(function() {
+      event.sender.send('shell:close:all');
     });
-    child.on('close', function () {
-      event.sender.send('shell:close', command);
-    })
   });
 
   // Create the browser window.
