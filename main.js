@@ -23,12 +23,24 @@ app.on('window-all-closed', function() {
 // initialization and is ready to create browser windows.
 app.on('ready', function() {
   ipcMain.on('shell:which', function(event, command) {
-    event.returnValue = shell.which(command);
+    event.sender.send('shell:start', `which ${command}`);
+    event.sender.send('shell:which', shell.which(command));
+    event.sender.send('shell:close', `which ${command}`);
   });
+
   ipcMain.on('shell:exec', function(event, ...args) {
-    return shell.exec(args.join(' '), function(code, stdout, stderr) {
-      event.returnValue = {code, stdout, stderr};
+    const command = args.join(' ');
+    event.sender.send('shell:start', command);
+    const child = shell.exec(command, { async: true, silent: true });
+    child.stdout.on('data', function(data) {
+      event.sender.send('shell:exec:stdout', data);
     });
+    child.stderr.on('data', function(data) {
+      event.sender.send('shell:exec:stderr', data);
+    });
+    child.on('close', function () {
+      event.sender.send('shell:close', command);
+    })
   });
 
   // Create the browser window.
